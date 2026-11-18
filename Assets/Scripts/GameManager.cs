@@ -260,6 +260,7 @@ public class GameManager : MonoBehaviour
         if (newBest) PlayerPrefs.SetInt("best_" + StageIndex, total);
         if (clear && StageIndex + 2 > UnlockedStages) UnlockedStages = Mathf.Min(stages.Length, StageIndex + 2);
         PlayerPrefs.Save();
+        ScoreSaver.Instance.Save(total);
 
         SoundManager.Play(clear ? Sfx.Clear : Sfx.Fail);
         bool hasNext = clear && StageIndex + 1 < stages.Length;

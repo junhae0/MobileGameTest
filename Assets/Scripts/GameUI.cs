@@ -29,7 +29,7 @@ public class GameUI : MonoBehaviour
     Rect lastSafeArea;
 
     GameObject menuPanel, hudPanel, resultPanel, pausePanel, quitPanel;
-    Text pauseTitle;
+    Text pauseTitle, playerNameText;
     Button resumeButton, restartButton, toMenuButton, pauseQuitButton;
     Text goldText, timerText, scoreText, countdownText, missionText, boostText, popupText;
     Text resultTitle, resultBody;
@@ -45,7 +45,7 @@ public class GameUI : MonoBehaviour
     public void Build(GameManager manager)
     {
         gm = manager;
-        font = gm.uiFont != null ? gm.uiFont : LoadDefaultFont();
+        font = ResolveFont(gm.uiFont);
         EnsureEventSystem();
 
         var canvasGo = new GameObject("Canvas", typeof(RectTransform));
@@ -80,6 +80,33 @@ public class GameUI : MonoBehaviour
         flashImage.raycastTarget = false;
     }
 
+    /// <summary>
+    /// 폰트 우선순위: ① 인스펙터 Ui Font → ② Assets/Resources/KoreanFont.ttf → ③ Resources 폴더 안 아무 폰트 → ④ 유니티 기본 폰트
+    /// Resources 폴더에 넣은 폰트는 인스펙터 연결이 풀려도 빌드에 항상 포함됩니다.
+    /// (WebGL 은 기기 폰트를 빌려 쓸 수 없어서, 한글 폰트가 없으면 한글이 아예 안 보입니다)
+    /// </summary>
+    public static Font ResolveFont(Font inspectorFont)
+    {
+        if (inspectorFont != null)
+        {
+            Debug.Log("[오토바이 고수] UI 폰트: " + inspectorFont.name + " (인스펙터)");
+            return inspectorFont;
+        }
+        Font f = Resources.Load<Font>("KoreanFont");
+        if (f == null)
+        {
+            Font[] all = Resources.LoadAll<Font>("");
+            if (all.Length > 0) f = all[0];
+        }
+        if (f != null)
+        {
+            Debug.Log("[오토바이 고수] UI 폰트: " + f.name + " (Resources 폴더)");
+            return f;
+        }
+        Debug.LogWarning("[오토바이 고수] 한글 폰트가 없습니다. Assets/Resources 폴더에 한글 .ttf 를 KoreanFont.ttf 이름으로 넣어주세요. (WebGL 에서는 한글이 표시되지 않습니다)");
+        return LoadDefaultFont();
+    }
+
     static Font LoadDefaultFont()
     {
         Font f = null;
@@ -88,7 +115,7 @@ public class GameUI : MonoBehaviour
         return f;
     }
 
-    static void EnsureEventSystem()
+    public static void EnsureEventSystem()
     {
 #if UNITY_2023_1_OR_NEWER
         bool exists = Object.FindAnyObjectByType<EventSystem>() != null;
@@ -150,8 +177,14 @@ public class GameUI : MonoBehaviour
         Transform m = menuPanel.transform;
 
         // 상단 작은 버튼: 종료 / 음악 / 효과음
-        MakeButton("QuitButton", m, "종료", Gray, new Vector2(0.03f, 0.955f), new Vector2(0.2f, 0.995f), () => ShowQuitDialog(true), 16);
-        MakeButton("SettingsButton", m, "설정", Gray, new Vector2(0.76f, 0.955f), new Vector2(0.97f, 0.995f), () => ShowPause(true), 16);
+        var quitButton = MakeButton("QuitButton", m, "종료", Gray, new Vector2(0.03f, 0.955f), new Vector2(0.2f, 0.995f), () => ShowQuitDialog(true), 16);
+#if UNITY_WEBGL && !UNITY_EDITOR
+        quitButton.gameObject.SetActive(false); // 웹에서는 앱 종료가 불가능 → 버튼 숨김
+#endif
+        // 로그인한 손님 이름 + 로그아웃 (Login 씬으로 돌아감)
+        playerNameText = MakeText("PlayerName", m, "", 16, new Color(0.8f, 0.85f, 0.95f), TextAnchor.MiddleCenter, new Vector2(0.21f, 0.955f), new Vector2(0.57f, 0.995f));
+        MakeButton("LogoutButton", m, "로그아웃", Red, new Vector2(0.59f, 0.955f), new Vector2(0.785f, 0.995f), () => AuthManager.Logout(), 16);
+        MakeButton("SettingsButton", m, "설정", Gray, new Vector2(0.8f, 0.955f), new Vector2(0.97f, 0.995f), () => ShowPause(true), 16);
 
         var title = MakeText("Title", m, "오토바이 고수", 54, Color.white, TextAnchor.MiddleCenter, new Vector2(0, 0.86f), new Vector2(1, 0.95f));
         title.fontStyle = FontStyle.Bold;
@@ -235,6 +268,9 @@ public class GameUI : MonoBehaviour
         restartButton = MakeButton("Restart", c, "처음부터 다시", Blue, new Vector2(0.08f, 0.305f), new Vector2(0.92f, 0.405f), () => gm.RetryStage(), 22);
         toMenuButton = MakeButton("ToMenu", c, "메뉴로", Gray, new Vector2(0.08f, 0.18f), new Vector2(0.92f, 0.28f), () => gm.GoToMenu(), 22);
         pauseQuitButton = MakeButton("Quit", c, "게임 종료", Red, new Vector2(0.08f, 0.055f), new Vector2(0.92f, 0.155f), () => ShowQuitDialog(true), 22);
+#if UNITY_WEBGL && !UNITY_EDITOR
+        pauseQuitButton.gameObject.SetActive(false);
+#endif
         pausePanel.SetActive(false);
     }
 
@@ -372,6 +408,7 @@ public class GameUI : MonoBehaviour
     void RefreshMenu()
     {
         goldText.text = $"보유 골드  {gm.Gold:N0} G";
+        playerNameText.text = AuthManager.Uid != "" ? AuthManager.Name : "로그인 안 됨";
         int unlocked = gm.UnlockedStages;
         for (int i = 0; i < stageButtons.Length; i++)
         {
